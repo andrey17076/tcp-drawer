@@ -19,18 +19,17 @@ import java.net.UnknownHostException;
 
 public class Client extends Application {
 
-    protected static PrintWriter out;
-    protected static TextArea log;
-    protected static InetAddress address;
-    protected static int port;
+    private static TextArea log;
+    private static Socket socket;
+    private static BufferedReader in;
+    private static PrintWriter out;
 
-
-    public Client() throws IOException{
+    public Client() {
         log = new TextArea();
     }
 
     @Override
-    public void start(Stage primaryStage) throws IOException {
+    public void start(Stage primaryStage) {
         primaryStage.setTitle("Drawer");
 
         //Color Picker
@@ -47,20 +46,23 @@ public class Client extends Application {
         portField.setPromptText("PORT");
 
         //Confirm button
-        Button connectButton = new Button("Connect");
+        Button connectButton = new Button("Open");
         connectButton.setOnAction(event -> {
             try {
-                address = InetAddress.getByName(ipField.getText());
-                port = Integer.parseInt(portField.getText());
+                InetAddress address = InetAddress.getByName(ipField.getText());
                 try {
-                    Socket socket = new Socket(address, port);
-                    out = new PrintWriter(socket.getOutputStream(), true);
-                    new Handler(socket).start();
-                } catch (IOException e) {
-                    e.printStackTrace();
+                    int port = Integer.parseInt(portField.getText());
+                    try {
+                        new Handler(address, port).start();
+                        connectButton.setDisable(true);
+                    } catch (IOException e) {
+                        log.appendText(ipField.getText() + ":" + portField.getText() + ": " + "Can't connect\n");
+                    }
+                } catch (NumberFormatException e) {
+                    log.appendText(portField.getText() + ": " + "Incorrect port\n");
                 }
             } catch (UnknownHostException e) {
-                e.printStackTrace();
+                log.appendText(ipField.getText() + ": " + "Unknown hostname\n");
             }
         });
 
@@ -95,6 +97,7 @@ public class Client extends Application {
         canvas.setWidth(600);
         canvas.getGraphicsContext2D().fill();
         canvas.setCursor(Cursor.CROSSHAIR);
+        canvas.setDisable(true);
 
         //Main Layout of Scene
         SplitPane mainLayout = new SplitPane();
@@ -109,27 +112,43 @@ public class Client extends Application {
         primaryStage.setMinHeight(600);
         primaryStage.setMaxHeight(600);
         primaryStage.show();
+        primaryStage.setOnCloseRequest(event -> {
+            try {
+                socket.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        });
     }
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) {
         launch(args);
     }
 
     private static class Handler extends Thread{
 
-        protected static BufferedReader in;
+        public Handler(InetAddress address, int port) throws IOException{
+            socket = new Socket(address, port);
 
-        public Handler(Socket socket) throws IOException{
-            out.println("Hello!");
             in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            log.appendText("Ready\n");
+
+            out = new PrintWriter(socket.getOutputStream(), true);
+            out.println("Hello!");
         }
 
         public void run() {
-            while (true) {
+            try {
+                while (true) {
+                    try {
+                        String input = in.readLine();
+                        log.appendText(input + "\n");
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            } finally {
                 try {
-                    String input = in.readLine();
-                    log.appendText(input + "\n");
+                    socket.close();
                 } catch (IOException e) {
                     e.printStackTrace();
                 }

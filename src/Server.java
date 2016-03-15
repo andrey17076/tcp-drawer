@@ -4,17 +4,15 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.Arrays;
 import java.util.HashSet;
 
 public class Server {
 
-    private static final int PORT = 5555;
-    private static HashSet<PrintWriter> writers = new HashSet<>();
+    private static HashSet<PrintWriter> clients = new HashSet<>();
 
-    public static void main(String[] args) throws IOException {
-        System.out.println("Working...");
-        ServerSocket listener = new ServerSocket(PORT);
+    public static void main(String[] args) throws IOException, NumberFormatException {
+        int port = Integer.parseInt(args[1]);
+        ServerSocket listener = new ServerSocket(port);
         try {
             while (true) {
                 new Handler(listener.accept()).start();
@@ -39,7 +37,7 @@ public class Server {
                 in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 out = new PrintWriter(socket.getOutputStream(), true);
 
-                writers.add(out);
+                clients.add(out);
 
                 while (true) {
                     String input = in.readLine();
@@ -49,16 +47,17 @@ public class Server {
                         return;
                     }
 
-                    for (PrintWriter writer : writers) {
-                        writer.println(input);
+                    for (PrintWriter client : clients) {
+                        client.println(input);
                     }
                 }
 
             } catch (IOException e) {
                 e.printStackTrace();
             } finally {
+
                 if (out != null) {
-                    writers.remove(out);
+                    clients.remove(out);
                 }
 
                 try {
