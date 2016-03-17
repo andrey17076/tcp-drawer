@@ -18,6 +18,7 @@ public class Client extends Application {
 
     private static TextArea log;
     private static Canvas canvas;
+    private static ColorPicker colorPicker;
 
     private static Socket socket;
     private static OutputStream socketOutStream;
@@ -27,7 +28,7 @@ public class Client extends Application {
         primaryStage.setTitle("Drawer");
 
         //Color Picker
-        ColorPicker colorPicker = new ColorPicker();
+        colorPicker = new ColorPicker();
         colorPicker.setMinHeight(27);
         colorPicker.setValue(Color.valueOf("Black"));
 
@@ -69,7 +70,7 @@ public class Client extends Application {
 
         //Log Pane
         TitledPane logPane = new TitledPane();
-        logPane.setMinHeight(360);
+        logPane.setMinHeight(210);
         logPane.setText("Log");
         logPane.setCollapsible(false);
         log = new TextArea();
@@ -83,15 +84,15 @@ public class Client extends Application {
 
         //Canvas
         canvas = new Canvas();
-        canvas.setHeight(600);
-        canvas.setWidth(600);
+        canvas.setHeight(450);
+        canvas.setWidth(450);
         canvas.setCursor(Cursor.CROSSHAIR);
         canvas.getGraphicsContext2D().setLineWidth(5);
         canvas.getGraphicsContext2D().setFill(Color.WHITE);
         canvas.setDisable(false);
         canvas.setOnMousePressed(event -> {
-            sendCoordinates(-1, -1);
-            canvas.setOnMouseDragged(event1 -> sendCoordinates(event1.getX(), event1.getY()));
+            sendPointInfo();
+            canvas.setOnMouseDragged(event1 -> sendPointInfo(event1.getX(), event1.getY()));
         });
 
         //Main Layout of Scene
@@ -100,18 +101,29 @@ public class Client extends Application {
         mainLayout.getItems().addAll(controlPanel, canvas);
 
         //Main Scene
-        Scene scene = new Scene(mainLayout, 850, 600);
+        Scene scene = new Scene(mainLayout, 700, 450);
         primaryStage.setScene(scene);
-        primaryStage.setMaxWidth(850);
-        primaryStage.setMinWidth(850);
-        primaryStage.setMinHeight(600);
-        primaryStage.setMaxHeight(600);
+        primaryStage.setMaxWidth(700);
+        primaryStage.setMinWidth(700);
+        primaryStage.setMinHeight(450);
+        primaryStage.setMaxHeight(450);
         primaryStage.show();
         primaryStage.setOnCloseRequest(event -> System.exit(0));
     }
 
-    public static void sendCoordinates(double x, double y) {
-        byte[] buf = new byte[4];
+    public static void sendPointInfo() {
+        byte[] buf = new byte[7];
+        buf[4] = 127;
+
+        try {
+            socketOutStream.write(buf);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static void sendPointInfo(double x, double y) {
+        byte[] buf = new byte[7];
         int intX = (int) x;
         int intY = (int) y;
 
@@ -119,6 +131,9 @@ public class Client extends Application {
         buf[1] = (byte) (intX & 0xFF);
         buf[2] = (byte) (intY >> 8);
         buf[3] = (byte) (intY & 0xFF);
+        buf[4] = (byte) (100 * colorPicker.getValue().getRed());
+        buf[5] = (byte) (100 * colorPicker.getValue().getGreen());
+        buf[6] = (byte) (100 * colorPicker.getValue().getBlue());
 
         try {
             socketOutStream.write(buf);
@@ -151,11 +166,10 @@ public class Client extends Application {
         }
 
         public void run() {
-            int prevX, prevY;
-            prevX = prevY = 65535;
+            int prevX = 0, prevY = 0, prevLineFlag = 127;
             while (!this.isInterrupted()) {
                 try {
-                    byte[] buf = new byte[4];
+                    byte[] buf = new byte[7];
                     int length = socketInStream.read(buf);
 
                     if (length == 0)
@@ -164,17 +178,21 @@ public class Client extends Application {
                     int x = ((buf[0] & 0xFF) << 8) | (buf[1] & 0xFF);
                     int y = ((buf[2] & 0xFF) << 8) | (buf[3] & 0xFF);
 
-                    if (x != 65535) {
-                        putLog("Received", x + " " + y);
-                        if (prevX != 65535)
+                    if (buf[4] != 127) {
+                        if (prevLineFlag != 127) {
+                            Color color = new Color(
+                                    (double) buf[4] / 100,
+                                    (double) buf[5] / 100,
+                                    (double) buf[6] / 100,
+                                    1);
+                            canvas.getGraphicsContext2D().setStroke(color);
                             canvas.getGraphicsContext2D().strokeLine(prevX, prevY, x, y);
-                    } else {
-                        putLog("Received", "New line");
+                        }
                     }
 
                     prevX = x;
                     prevY = y;
-
+                    prevLineFlag = buf[4];
                 } catch (IOException e) {
                     putLog("Client", "Disconnected from the server");
                     this.interrupt();

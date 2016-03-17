@@ -41,7 +41,7 @@ public class Server {
                 clients.add(socketOutStream);
 
                 while (!this.isInterrupted()) {
-                    byte[] buf = new byte[4];
+                    byte[] buf = new byte[7];
                     int length = socketInStream.read(buf);
 
                     if (length == 0)
@@ -52,7 +52,7 @@ public class Server {
                     int x = ((buf[0] & 0xFF) << 8) + (buf[1] & 0xFF);
                     int y = ((buf[2] & 0xFF) << 8) + (buf[3] & 0xFF);
 
-                    if (x != 65535) {
+                    if (buf[4] != 127) {
                         System.out.println(x + " " + y);
                     } else {
                         System.out.println("New line");
