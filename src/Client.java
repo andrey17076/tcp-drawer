@@ -20,6 +20,7 @@ import java.util.Arrays;
 public class Client extends Application {
 
     private static TextArea log;
+    private static Canvas canvas;
     private static Socket socket;
     private static InputStream in;
     private static OutputStream out;
@@ -87,7 +88,7 @@ public class Client extends Application {
         controlPanel.getChildren().addAll(colorPicker, socketInfo, logPane);
 
         //Canvas
-        Canvas canvas = new Canvas();
+        canvas = new Canvas();
         canvas.setHeight(600);
         canvas.setWidth(600);
         canvas.setCursor(Cursor.CROSSHAIR);
@@ -167,7 +168,8 @@ public class Client extends Application {
                         if (length == 4) {
                             int x = ((message[0] & 0xFF) << 8) + (message[1] & 0xFF);
                             int y = ((message[2] & 0xFF) << 8) + (message[3] & 0xFF);
-                            log.appendText(x + " " + y + "\n");
+                            //log.appendText(x + " " + y + "\n");
+                            canvas.getGraphicsContext2D().fillOval(x - 5, y - 5, 10, 10);
                         } else {
                             log.appendText(ByteBuffer.wrap(message, 0, length).toString());
                         }
