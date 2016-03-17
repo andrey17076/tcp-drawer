@@ -1,18 +1,18 @@
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
+import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.HashSet;
 
 public class Server {
 
-    private static HashSet<PrintWriter> clients = new HashSet<>();
+    private static HashSet<OutputStream> clients = new HashSet<>();
 
     public static void main(String[] args) throws IOException, NumberFormatException {
-        int port = Integer.parseInt(args[1]);
+        int port = Integer.parseInt(args[0]);
         ServerSocket listener = new ServerSocket(port);
+        System.out.println("Started!");
         try {
             while (true) {
                 new Handler(listener.accept()).start();
@@ -24,8 +24,8 @@ public class Server {
 
     private static class Handler extends Thread {
         private Socket socket;
-        private BufferedReader in;
-        private PrintWriter out;
+        private InputStream in;
+        private OutputStream out;
 
         public Handler(Socket socket) {
             this.socket = socket;
@@ -34,21 +34,29 @@ public class Server {
 
         public void run() {
             try {
-                in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                out = new PrintWriter(socket.getOutputStream(), true);
+                in = socket.getInputStream();
+                out = socket.getOutputStream();
 
                 clients.add(out);
 
                 while (true) {
-                    String input = in.readLine();
-                    System.out.println(input);
+                    byte[] message = new byte[4];
+                    int length = in.read(message);
 
-                    if (input == null) {
-                        return;
+                    if (length == 0) return;
+
+                    System.out.print("From: " + socket.getInetAddress().getHostAddress() + ": ");
+
+                    if (message[0] >= 0) {
+                        int x = ((message[0] & 0xFF) << 8) + (message[1] & 0xFF);
+                        int y = ((message[2] & 0xFF) << 8) + (message[3] & 0xFF);
+                        System.out.println(x + " " + y);
+                    } else {
+                        System.out.println(Arrays.toString(message));
                     }
 
-                    for (PrintWriter client : clients) {
-                        client.println(input);
+                    for (OutputStream client : clients) {
+                        client.write(message);
                     }
                 }
 
