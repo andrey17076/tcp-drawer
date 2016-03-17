@@ -1,31 +1,32 @@
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.HashSet;
 
 public class Server {
 
     private static HashSet<OutputStream> clients = new HashSet<>();
 
-    public static void main(String[] args) throws IOException, NumberFormatException {
-        int port = Integer.parseInt(args[0]);
-        ServerSocket listener = new ServerSocket(port);
-        System.out.println("Started!");
+    public static void main(String[] args) {
         try {
-            while (true) {
-                new Handler(listener.accept()).start();
+            int port = Integer.parseInt(args[0]);
+            try {
+                ServerSocket listener = new ServerSocket(port);
+                System.out.println("Started!");
+                while (true)
+                    new Handler(listener.accept()).start();
+            } catch (IOException e) {
+                System.out.println("Can't run server");
             }
-        } finally {
-            listener.close();
+        } catch (NumberFormatException e) {
+            System.out.println("Incorrect port");
         }
     }
 
     private static class Handler extends Thread {
         private Socket socket;
-        private InputStream in;
-        private OutputStream out;
+        private InputStream socketInStream;
+        private OutputStream socketOutStream;
 
         public Handler(Socket socket) {
             this.socket = socket;
@@ -34,44 +35,42 @@ public class Server {
 
         public void run() {
             try {
-                in = socket.getInputStream();
-                out = socket.getOutputStream();
+                socketInStream = socket.getInputStream();
+                socketOutStream = socket.getOutputStream();
 
-                clients.add(out);
+                clients.add(socketOutStream);
 
-                while (true) {
-                    byte[] message = new byte[4];
-                    int length = in.read(message);
+                while (!this.isInterrupted()) {
+                    byte[] buf = new byte[4];
+                    int length = socketInStream.read(buf);
 
-                    if (length == 0) return;
+                    if (length == 0)
+                        return;
 
                     System.out.print("From: " + socket.getInetAddress().getHostAddress() + ": ");
 
-                    if (message[0] >= 0) {
-                        int x = ((message[0] & 0xFF) << 8) + (message[1] & 0xFF);
-                        int y = ((message[2] & 0xFF) << 8) + (message[3] & 0xFF);
+                    int x = ((buf[0] & 0xFF) << 8) + (buf[1] & 0xFF);
+                    int y = ((buf[2] & 0xFF) << 8) + (buf[3] & 0xFF);
+
+                    if (x != 65535) {
                         System.out.println(x + " " + y);
                     } else {
-                        System.out.println(Arrays.toString(message));
+                        System.out.println("New line");
                     }
 
                     for (OutputStream client : clients) {
-                        client.write(message);
+                        client.write(buf);
                     }
                 }
-
             } catch (IOException e) {
-                e.printStackTrace();
-            } finally {
-
-                if (out != null) {
-                    clients.remove(out);
-                }
-
                 try {
                     socket.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
+                } catch (IOException e1) {
+                    e1.printStackTrace();
+                }
+            } finally {
+                if (socketOutStream != null) {
+                    clients.remove(socketOutStream);
                 }
             }
         }

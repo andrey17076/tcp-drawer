@@ -12,22 +12,15 @@ import javafx.stage.Stage;
 import java.io.*;
 import java.net.InetAddress;
 import java.net.Socket;
-import java.net.SocketException;
 import java.net.UnknownHostException;
-import java.nio.ByteBuffer;
-import java.util.Arrays;
 
 public class Client extends Application {
 
     private static TextArea log;
     private static Canvas canvas;
-    private static Socket socket;
-    private static InputStream in;
-    private static OutputStream out;
 
-    public Client() throws SocketException{
-        log = new TextArea();
-    }
+    private static Socket socket;
+    private static OutputStream socketOutStream;
 
     @Override
     public void start(Stage primaryStage) {
@@ -55,10 +48,10 @@ public class Client extends Application {
                     int port = Integer.parseInt(portField.getText());
                     new Handler(address, port).start();
                 } catch (NumberFormatException e) {
-                    log.appendText(portField.getText() + ": " + "Incorrect port\n");
+                    putLog(portField.getText(), "Incorrect port");
                 }
             } catch (UnknownHostException e) {
-                log.appendText(ipField.getText() + ": " + "Unknown hostname\n");
+                putLog(ipField.getText(), "Unknown hostname");
             }
         });
 
@@ -79,6 +72,7 @@ public class Client extends Application {
         logPane.setMinHeight(360);
         logPane.setText("Log");
         logPane.setCollapsible(false);
+        log = new TextArea();
         logPane.setContent(log);
 
         //Left Panel of Main Layout
@@ -92,27 +86,12 @@ public class Client extends Application {
         canvas.setHeight(600);
         canvas.setWidth(600);
         canvas.setCursor(Cursor.CROSSHAIR);
+        canvas.getGraphicsContext2D().setLineWidth(5);
+        canvas.getGraphicsContext2D().setFill(Color.WHITE);
         canvas.setDisable(false);
-        canvas.setOnMouseDragged(event -> {
-            byte[] message = new byte[4];
-            int x = (int) event.getX();
-            int y = (int) event.getY();
-
-            message[0] = (byte) (x >> 8);
-            message[1] = (byte) (x & 0xFF);
-
-            message[2] = (byte) (y >> 8);
-            message[3] = (byte) (y & 0xFF);
-
-            x = ((message[0] & 0xFF) << 8) + (message[1] & 0xFF);
-            y = ((message[2] & 0xFF) << 8) + (message[3] & 0xFF);
-            //log.appendText(Arrays.toString(message) + "\n");
-
-            try {
-                out.write(message);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+        canvas.setOnMousePressed(event -> {
+            sendCoordinates(-1, -1);
+            canvas.setOnMouseDragged(event1 -> sendCoordinates(event1.getX(), event1.getY()));
         });
 
         //Main Layout of Scene
@@ -128,60 +107,82 @@ public class Client extends Application {
         primaryStage.setMinHeight(600);
         primaryStage.setMaxHeight(600);
         primaryStage.show();
-        primaryStage.setOnCloseRequest(event -> {
-            try {
-                socket.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            } finally {
-                System.exit(0);
-            }
-        });
+        primaryStage.setOnCloseRequest(event -> System.exit(0));
+    }
+
+    public static void sendCoordinates(double x, double y) {
+        byte[] buf = new byte[4];
+        int intX = (int) x;
+        int intY = (int) y;
+
+        buf[0] = (byte) (intX >> 8);
+        buf[1] = (byte) (intX & 0xFF);
+        buf[2] = (byte) (intY >> 8);
+        buf[3] = (byte) (intY & 0xFF);
+
+        try {
+            socketOutStream.write(buf);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static void putLog(String title, String buf) {
+        log.appendText(title + ": " + buf + "\n");
     }
 
     public static void main(String[] args) {
         launch(args);
     }
 
-    private static class Handler extends Thread{
+    private static class Handler extends Thread {
+
+        private static InputStream socketInStream;
 
         public Handler(InetAddress address, int port) {
             try {
                 socket = new Socket(address, port);
-                in = socket.getInputStream();
-                out = socket.getOutputStream();
-                log.appendText("Connected!\n");
+                socketInStream = socket.getInputStream();
+                socketOutStream = socket.getOutputStream();
+                putLog("Client", "Connected");
             } catch (IOException e) {
-                log.appendText(address.getHostAddress() + ":" + Integer.toString(port) + ": " + "Can't connect\n");
+                putLog(address.getHostAddress() + ":" + Integer.toString(port), "Can't connect");
             }
         }
 
         public void run() {
-            try {
-                while (true) {
-                    try {
-                        byte[] message = new byte[4];
-                        int length = in.read(message);
-
-                        if (length == 0) return;
-
-                        if (length == 4) {
-                            int x = ((message[0] & 0xFF) << 8) + (message[1] & 0xFF);
-                            int y = ((message[2] & 0xFF) << 8) + (message[3] & 0xFF);
-                            //log.appendText(x + " " + y + "\n");
-                            canvas.getGraphicsContext2D().fillOval(x - 5, y - 5, 10, 10);
-                        } else {
-                            log.appendText(ByteBuffer.wrap(message, 0, length).toString());
-                        }
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                }
-            } finally {
+            int prevX, prevY;
+            prevX = prevY = 65535;
+            while (!this.isInterrupted()) {
                 try {
-                    socket.close();
+                    byte[] buf = new byte[4];
+                    int length = socketInStream.read(buf);
+
+                    if (length == 0)
+                        return;
+
+                    int x = ((buf[0] & 0xFF) << 8) | (buf[1] & 0xFF);
+                    int y = ((buf[2] & 0xFF) << 8) | (buf[3] & 0xFF);
+
+                    if (x != 65535) {
+                        putLog("Received", x + " " + y);
+                        if (prevX != 65535)
+                            canvas.getGraphicsContext2D().strokeLine(prevX, prevY, x, y);
+                    } else {
+                        putLog("Received", "New line");
+                    }
+
+                    prevX = x;
+                    prevY = y;
+
                 } catch (IOException e) {
-                    e.printStackTrace();
+                    putLog("Client", "Disconnected from the server");
+                    this.interrupt();
+                    try {
+                        socket.close();
+                    } catch (IOException e1) {
+                        putLog("Client", "Can't close socket");
+                    }
                 }
             }
         }
