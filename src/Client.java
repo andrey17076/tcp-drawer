@@ -185,8 +185,10 @@ public class Client extends Application {
                                     (double) buf[5] / 100,
                                     (double) buf[6] / 100,
                                     1);
-                            canvas.getGraphicsContext2D().setStroke(color);
-                            canvas.getGraphicsContext2D().strokeLine(prevX, prevY, x, y);
+                            if (x < 450 && y < 450 && prevX < 450 && prevY < 450) {
+                                canvas.getGraphicsContext2D().setStroke(color);
+                                canvas.getGraphicsContext2D().strokeLine(prevX, prevY, x, y);
+                            }
                         }
                     }
 
